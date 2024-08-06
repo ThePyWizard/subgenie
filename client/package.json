@@ -11,5 +11,17 @@
   "description": "",
   "devDependencies": {
     "electron": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.example.subgenie",
+    "win": {
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "icon": "assets/icon.png"
+    }
   }
 }
