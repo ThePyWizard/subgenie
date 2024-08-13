@@ -1,31 +1,23 @@
 const { app, BrowserWindow } = require('electron');
+const url = require('url');
 const path = require('path');
 
-function createWindow() {
+function createMainWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: true,
-      contextIsolation: false
-    },
-    icon: path.join(__dirname, 'assets', 'icon.png') // Path to your icon file
+    title: 'Electron App',
   });
 
-  mainWindow.loadFile('src/index.html');
+mainWindow.webContents.openDevTools();
+
+const startUrl = url.format({
+  pathname: path.join(__dirname, 'index.html'),
+  protocol: 'file:',
+});
+
+mainWindow.loadURL('http://localhost:3000');
 }
 
-app.on('ready', createWindow);
+app.whenReady().then(createMainWindow);
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
-});

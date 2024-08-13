@@ -4,13 +4,22 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:watch": "npx electronmon --trace-warnings .",
+    "start-react": "react-scripts start"
   },
   "author": "",
   "license": "MIT",
   "description": "",
   "devDependencies": {
-    "electron": "^26.0.0"
+    "electron": "^26.0.0",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
   },
   "build": {
     "appId": "com.example.subgenie",
@@ -23,5 +32,11 @@
     "linux": {
       "icon": "assets/icon.png"
     }
+  },
+  "electronmon": {
+    "patterns": [
+      "!node_modules/**",
+      "!app/node_modules/**"
+    ]
   }
 }
