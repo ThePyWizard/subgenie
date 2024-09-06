@@ -32,7 +32,42 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
+}
+
+.drag-drop-box {
+  width: 300px;
+  height: 200px;
+  border: 3px dotted #cccccc;
+  /* Changed to dotted line */
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-size: 16px;
+  color: #777;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+  /* Remove default outline */
+}
+
+.drag-drop-box.dragging {
+  border-color: #000;
+  background-color: #f0f0f0;
+}
+
+.drag-drop-box:hover {
+  border-color: #999;
+  /* Darken border on hover for better feedback */
+}
+
+.drag-drop-box p {
+  margin: 0;
+  text-align: center;
+  padding: 20px;
 }
