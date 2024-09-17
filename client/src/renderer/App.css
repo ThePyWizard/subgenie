@@ -1,0 +1,192 @@
+/*
+ * @NOTE: Prepend a `~` to css file paths that are in your node_modules
+ *        See https://github.com/webpack-contrib/sass-loader#imports
+ */
+body {
+  position: relative;
+  color: white;
+  height: 100vh;
+  background-color: #2f2f2f;
+  font-family: sans-serif;
+  overflow-y: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+button {
+  background-color: white;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  appearance: none;
+  font-size: 1.3rem;
+  box-shadow: 0px 8px 28px -6px rgba(24, 39, 75, 0.12),
+    0px 18px 88px -4px rgba(24, 39, 75, 0.14);
+  transition: all ease-in 0.1s;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+button:hover {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+li {
+  list-style: none;
+}
+
+a {
+  text-decoration: none;
+  height: fit-content;
+  width: fit-content;
+  margin: 10px;
+}
+
+a:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.Hello {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+.video-editor {
+  display: flex;
+  height: 100vh;
+  background-color: #232323;
+  color: #fff;
+}
+
+.sidebar {
+  width: 250px;
+  background-color: #2f2f2f;
+  padding: 20px;
+}
+
+.import-btn {
+  width: 100%;
+  padding: 10px;
+  background-color: #2f99fc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.file-name {
+  margin-top: 20px;
+  word-break: break-all;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 20px;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.export-btn {
+  padding: 10px 20px;
+  background-color: #2f99fc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.video-player {
+  width: 100%;
+  max-height: 400px;
+  background-color: #000;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.controls button {
+  margin: 0 10px;
+  padding: 5px 10px;
+  background-color: #2f99fc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.timeline-container {
+  margin-top: 20px;
+}
+
+.timeline {
+  height: 20px;
+  background-color: #555;
+  position: relative;
+  cursor: pointer;
+}
+
+.progress {
+  height: 100%;
+  background-color: #2f99fc;
+  position: absolute;
+}
+
+.trim-area {
+  position: absolute;
+  height: 100%;
+  background-color: rgba(76, 134, 175, 0.3);
+}
+
+.trim-handle {
+  position: absolute;
+  width: 10px;
+  height: 30px;
+  background-color: #fff;
+  top: -5px;
+  cursor: ew-resize;
+}
+
+.start-handle {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.end-handle {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.time-display {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+
+.placeholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 400px;
+  background-color: #333;
+  border-radius: 4px;
+}
