@@ -49,7 +49,7 @@ const App: React.FC = () => {
 
   const handleFastForward = () => {
     if (videoRef.current) {
-      const newTime = Math.min(videoRef.current.currentTime + 1, duration);
+      const newTime = Math.min(videoRef.current.currentTime + 10, duration);
       videoRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
@@ -57,7 +57,7 @@ const App: React.FC = () => {
 
   const handleRewind = () => {
     if (videoRef.current) {
-      const newTime = Math.max(videoRef.current.currentTime - 1, 0);
+      const newTime = Math.max(videoRef.current.currentTime - 10, 0);
       videoRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
