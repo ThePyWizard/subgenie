@@ -1,188 +1,236 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 import './App.css';
 
-// Main functional component for the video editor application
+const ffmpeg = new FFmpeg();
+
 const App: React.FC = () => {
-  // State hooks for managing video source, file name, playback state, and timing
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [startTime, setStartTime] = useState(0);
-  const [endTime, setEndTime] = useState(0);
+  const [selectedSections, setSelectedSections] = useState<Array<{ start: number; end: number }>>([]);
+  const [isConverting, setIsConverting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [selectionEnd, setSelectionEnd] = useState(0);
+  const [isDragging, setIsDragging] = useState<'start' | 'end' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const startHandleRef = useRef<HTMLDivElement>(null);
-  const endHandleRef = useRef<HTMLDivElement>(null);
-  const [isConverting, setIsConverting] = useState(false);
 
-  // Handle file selection for video input
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      try {
+        await ffmpeg.load();
+        ffmpeg.on('log', ({ message }) => {
+          console.log(message);
+        });
+        ffmpeg.on('progress', ({ progress }) => {
+          console.log(`Progress: ${Math.round(progress * 100)}%`);
+          setProgress(Math.round(progress * 100));
+        });
+        setFfmpegLoaded(true);
+      } catch (error) {
+        console.error('Failed to load FFmpeg:', error);
+        setError('Failed to load FFmpeg. Please try reloading the page.');
+      }
+    };
+    loadFFmpeg();
+  }, []);
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    // Check for valid video file type
     if (file && file.type === 'video/mp4') {
-      // Set video source URL and file name for display
       setVideoSrc(URL.createObjectURL(file));
       setFileName(file.name);
     }
   };
 
-  // Update current playback time and handle loop logic
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
-      // Loop back to start time if the end time is reached
-      if (videoRef.current.currentTime >= endTime) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        videoRef.current.currentTime = startTime;
-      }
     }
   };
 
-  // Set metadata for video duration upon loading
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
-      setEndTime(videoRef.current.duration); // Default to full duration
+      setSelectionEnd(videoRef.current.duration);
     }
   };
 
-  // Toggle play/pause functionality
   const handlePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.currentTime = startTime; // Start from selected start time
         videoRef.current.play();
       }
       setIsPlaying(!isPlaying);
     }
   };
 
-  // Fast forward playback by 10 seconds
   const handleFastForward = () => {
     if (videoRef.current) {
-      const newTime = Math.min(videoRef.current.currentTime + 10, endTime);
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
+      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, duration);
     }
   };
 
-  // Rewind playback by 10 seconds
   const handleRewind = () => {
     if (videoRef.current) {
-      const newTime = Math.max(videoRef.current.currentTime - 10, startTime);
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
+      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
     }
   };
 
-  // Update playback time based on user clicking on the timeline
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (timelineRef.current && videoRef.current) {
       const rect = timelineRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const clickedTime = (x / rect.width) * duration;
-      const newTime = Math.max(startTime, Math.min(clickedTime, endTime));
-      videoRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
+      videoRef.current.currentTime = clickedTime;
+      setCurrentTime(clickedTime);
     }
   };
 
-  // Handle dragging of trim handles for selecting start and end times
-  const handleTrimDrag = (e: React.MouseEvent<HTMLDivElement>, isStart: boolean) => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (timelineRef.current) {
-        const rect = timelineRef.current.getBoundingClientRect();
-        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-        const newTime = (x / rect.width) * duration;
-        if (isStart) {
-          setStartTime(Math.min(newTime, endTime - 1)); // Ensure start is before end
-          if (videoRef.current && videoRef.current.currentTime < newTime) {
-            videoRef.current.currentTime = newTime;
-          }
-        } else {
-          setEndTime(Math.max(newTime, startTime + 1)); // Ensure end is after start
-          if (videoRef.current && videoRef.current.currentTime > newTime) {
-            videoRef.current.currentTime = newTime;
-          }
-        }
-      }
-    };
-
-    // Clean up event listeners on mouse up
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    // Add event listeners for drag functionality
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, type: 'start' | 'end') => {
+    setIsDragging(type);
   };
 
-  // Generate audio from the video, converting to WAV format
-  const handleGenerateSubtitle = async () => {
-    if (!videoRef.current || !videoSrc) return; // Early return if no video
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging && timelineRef.current) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const newTime = Math.max(0, Math.min((x / rect.width) * duration, duration));
 
-    setIsConverting(true); // Indicate conversion in progress
-
-    const mediaElement = videoRef.current;
-    // Capture the audio stream from the video element
-    const stream = (mediaElement as any).captureStream();
-    const audioTrack = stream.getAudioTracks()[0];
-    const audioStream = new MediaStream([audioTrack]);
-
-    const mediaRecorder = new MediaRecorder(audioStream);
-    const audioChunks: Blob[] = []; // Store audio chunks for processing
-
-    mediaRecorder.ondataavailable = (event) => {
-      audioChunks.push(event.data); // Collect audio data
-    };
-
-    // Handle end of recording to create a downloadable WAV file
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const link = document.createElement('a');
-      link.href = audioUrl;
-      link.download = fileName.replace('.mp4', '.wav'); // Rename file appropriately
-      document.body.appendChild(link);
-      link.click(); // Trigger download
-      document.body.removeChild(link); // Clean up link element
-      setIsConverting(false); // Reset conversion state
-    };
-
-    mediaRecorder.start(); // Start recording
-    mediaElement.currentTime = startTime; // Start playback from trimmed start
-    mediaElement.play(); // Play the video to record audio
-
-    // Stop recording when the video reaches the end time
-    mediaElement.ontimeupdate = () => {
-      if (mediaElement.currentTime >= endTime) {
-        mediaElement.pause();
-        mediaRecorder.stop(); // Stop recording when reaching end time
-        mediaElement.ontimeupdate = null; // Cleanup event listener
+      if (isDragging === 'start') {
+        setSelectionStart(Math.min(newTime, selectionEnd));
+      } else if (isDragging === 'end') {
+        setSelectionEnd(Math.max(newTime, selectionStart));
       }
-    };
-  };
-
-  // Update video playback rate when changed
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = playbackRate;
     }
-  }, [playbackRate]);
+  };
 
-  // Format time in MM:SS for display
+  const handleMouseUp = () => {
+    setIsDragging(null);
+  };
+
+  const handleSplitSelection = () => {
+    setSelectedSections([...selectedSections, { start: selectionStart, end: selectionEnd }]);
+  };
+
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const processInChunks = async (inputFile: File, chunkDuration: number = 30) => {
+    const totalDuration = duration;
+    const chunks = Math.ceil(totalDuration / chunkDuration);
+    let outputChunks = [];
+
+    for (let i = 0; i < chunks; i++) {
+      const start = i * chunkDuration;
+      const end = Math.min((i + 1) * chunkDuration, totalDuration);
+
+      await ffmpeg.writeFile(`input_${i}.mp4`, await fetchFile(inputFile));
+
+      await ffmpeg.exec([
+        '-i', `input_${i}.mp4`,
+        '-ss', `${start}`,
+        '-to', `${end}`,
+        '-c', 'copy',
+        `output_${i}.mp4`
+      ]);
+
+      const data = await ffmpeg.readFile(`output_${i}.mp4`);
+      outputChunks.push(new Uint8Array(data));
+
+      // Clean up
+      await ffmpeg.deleteFile(`input_${i}.mp4`);
+      await ffmpeg.deleteFile(`output_${i}.mp4`);
+
+      setProgress((i + 1) / chunks * 100);
+    }
+
+    return new Blob(outputChunks, { type: 'video/mp4' });
+  };
+
+  const handleMergeSections = async () => {
+    if (!videoSrc || selectedSections.length === 0 || !ffmpegLoaded) return;
+
+    setIsConverting(true);
+    setError(null);
+    setProgress(0);
+
+    try {
+      await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
+
+      let outputFileName = 'merged_output.mp4';
+      let filterComplex = '';
+      let inputParts = '';
+
+      for (let i = 0; i < selectedSections.length; i++) {
+        const section = selectedSections[i];
+        const trimmedName = `trimmed${i}.mp4`;
+        await ffmpeg.exec(['-i', 'input.mp4', '-ss', `${section.start}`, '-to', `${section.end}`, '-c', 'copy', trimmedName]);
+        inputParts += `-i ${trimmedName} `;
+        filterComplex += `[${i}:v][${i}:a]`;
+      }
+
+      filterComplex += `concat=n=${selectedSections.length}:v=1:a=1[outv][outa]`;
+      await ffmpeg.exec([...inputParts.split(' '), '-filter_complex', filterComplex, '-map', '[outv]', '-map', '[outa]', outputFileName]);
+
+      const data = await ffmpeg.readFile(outputFileName);
+      const blob = new Blob([data], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'merged_video.mp4';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error merging video sections:', error);
+      setError('Failed to merge video sections. Please try again.');
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleMp4ToMp3Conversion = async () => {
+    if (!videoSrc || selectedSections.length === 0 || !ffmpegLoaded) return;
+
+    setIsConverting(true);
+    setError(null);
+    setProgress(0);
+
+    try {
+      await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
+
+      await ffmpeg.exec(['-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3']);
+
+      const data = await ffmpeg.readFile('output.mp3');
+      const blob = new Blob([data], { type: 'audio/mp3' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'converted_audio.mp3';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error converting MP4 to MP3:', error);
+      setError('Failed to convert MP4 to MP3. Please try again.');
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   return (
@@ -196,19 +244,26 @@ const App: React.FC = () => {
           type="file"
           accept="video/mp4"
           onChange={handleFileSelect}
-          style={{ display: 'none' }} // Hide input
+          style={{ display: 'none' }}
         />
-        {fileName && <p className="file-name">{fileName}</p>} {/* Display selected file name */}
+        {fileName && <p className="file-name">{fileName}</p>}
       </div>
       <div className="main-content">
         <div className="top-bar">
-          <h2>Untitled Project</h2>
+          <h2>Video Editor</h2>
+          {error && <div className="error-message">{error}</div>}
+          {isConverting && <div className="progress-bar" style={{ width: `${progress}%` }}></div>}
           <button
-            className="export-btn"
-            onClick={handleGenerateSubtitle}
-            disabled={!videoSrc || isConverting} // Disable if no video or converting
+            onClick={handleMergeSections}
+            disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
           >
-            {isConverting ? 'Converting...' : 'Generate Audio'} {/* Dynamic button text */}
+            {isConverting ? 'Processing...' : 'Merge Sections'}
+          </button>
+          <button
+            onClick={handleMp4ToMp3Conversion}
+            disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
+          >
+            {isConverting ? 'Converting...' : 'Convert to MP3'}
           </button>
         </div>
         {videoSrc ? (
@@ -225,35 +280,66 @@ const App: React.FC = () => {
               <button onClick={handlePlayPause}>{isPlaying ? '⏸' : '▶'}</button>
               <button onClick={handleFastForward}>⏩</button>
             </div>
-            <div className="timeline-container">
-              <div className="timeline" ref={timelineRef} onClick={handleTimelineClick}>
+            <div
+              className="timeline-container"
+              ref={timelineRef}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <div className="timeline" onClick={handleTimelineClick}>
                 <div className="progress" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
-                <div className="trim-area" style={{
-                  left: `${(startTime / duration) * 100}%`,
-                  right: `${100 - (endTime / duration) * 100}%`
-                }}></div>
+                {selectedSections.map((section, index) => (
+                  <div
+                    key={index}
+                    className="selected-section"
+                    style={{
+                      left: `${(section.start / duration) * 100}%`,
+                      width: `${((section.end - section.start) / duration) * 100}%`,
+                    }}
+                  ></div>
+                ))}
                 <div
-                  ref={startHandleRef}
-                  className="trim-handle start-handle"
-                  style={{ left: `${(startTime / duration) * 100}%` }}
-                  onMouseDown={(e) => handleTrimDrag(e, true)} // Start trim handle
+                  className="selection-bar start"
+                  style={{ left: `${(selectionStart / duration) * 100}%` }}
+                  onMouseDown={(e) => handleMouseDown(e, 'start')}
                 ></div>
                 <div
-                  ref={endHandleRef}
-                  className="trim-handle end-handle"
-                  style={{ left: `${(endTime / duration) * 100}%` }}
-                  onMouseDown={(e) => handleTrimDrag(e, false)} // End trim handle
+                  className="selection-bar end"
+                  style={{ left: `${(selectionEnd / duration) * 100}%` }}
+                  onMouseDown={(e) => handleMouseDown(e, 'end')}
+                ></div>
+                <div
+                  className="selection-range"
+                  style={{
+                    left: `${(selectionStart / duration) * 100}%`,
+                    width: `${((selectionEnd - selectionStart) / duration) * 100}%`,
+                  }}
                 ></div>
               </div>
             </div>
             <div className="time-display">
-              <span>{formatTime(currentTime)}</span> {/* Display current time */}
-              <span>{formatTime(duration)}</span> {/* Display total duration */}
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+            <div className="split-controls">
+              <button onClick={handleSplitSelection}>Split Video</button>
+              <span>{formatTime(selectionStart)} - {formatTime(selectionEnd)}</span>
+            </div>
+            <div className="sections-list">
+              <h3>Selected Sections:</h3>
+              <ul>
+                {selectedSections.map((section, index) => (
+                  <li key={index}>
+                    {formatTime(section.start)} - {formatTime(section.end)}
+                  </li>
+                ))}
+              </ul>
             </div>
           </>
         ) : (
           <div className="placeholder">
-            <p>Import media to start editing</p> {/* Placeholder prompt */}
+            <p>Import media to start editing</p>
           </div>
         )}
       </div>
@@ -261,4 +347,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App; // Export the App component for use in other files
+export default App;
