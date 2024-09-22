@@ -244,10 +244,11 @@ const App: React.FC = () => {
       let outputFileName = 'converted_audio.mp3';
 
       if (selectedSections.length > 0) {
-        inputFile = await mergeSelectedSections();
-        if (!inputFile) {
+        const mergedFile = await mergeSelectedSections();
+        if (!mergedFile) {
           throw new Error('Failed to merge selected sections');
         }
+        inputFile = mergedFile;
         outputFileName = 'trimmed_converted_audio.mp3';
       }
 
