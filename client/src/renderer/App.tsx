@@ -128,37 +128,6 @@ const App: React.FC = () => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const processInChunks = async (inputFile: File, chunkDuration: number = 30) => {
-    const totalDuration = duration;
-    const chunks = Math.ceil(totalDuration / chunkDuration);
-    let outputChunks = [];
-
-    for (let i = 0; i < chunks; i++) {
-      const start = i * chunkDuration;
-      const end = Math.min((i + 1) * chunkDuration, totalDuration);
-
-      await ffmpeg.writeFile(`input_${i}.mp4`, await fetchFile(inputFile));
-
-      await ffmpeg.exec([
-        '-i', `input_${i}.mp4`,
-        '-ss', `${start}`,
-        '-to', `${end}`,
-        '-c', 'copy',
-        `output_${i}.mp4`
-      ]);
-
-      const data = await ffmpeg.readFile(`output_${i}.mp4`);
-      outputChunks.push(new Uint8Array(data));
-
-      // Clean up
-      await ffmpeg.deleteFile(`input_${i}.mp4`);
-      await ffmpeg.deleteFile(`output_${i}.mp4`);
-
-      setProgress((i + 1) / chunks * 100);
-    }
-
-    return new Blob(outputChunks, { type: 'video/mp4' });
-  };
 
   const handleMergeSections = async () => {
     if (!videoSrc || selectedSections.length === 0 || !ffmpegLoaded) return;
@@ -170,31 +139,51 @@ const App: React.FC = () => {
     try {
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
 
-      let outputFileName = 'merged_output.mp4';
-      let filterComplex = '';
-      let inputParts = '';
+      // Sort selected sections by start time
+      const sortedSections = [...selectedSections].sort((a, b) => a.start - b.start);
 
-      for (let i = 0; i < selectedSections.length; i++) {
-        const section = selectedSections[i];
+      // Create a file with a list of video parts to concatenate
+      let concatFileContent = '';
+      for (let i = 0; i < sortedSections.length; i++) {
+        const { start, end } = sortedSections[i];
         const trimmedName = `trimmed${i}.mp4`;
-        await ffmpeg.exec(['-i', 'input.mp4', '-ss', `${section.start}`, '-to', `${section.end}`, '-c', 'copy', trimmedName]);
-        inputParts += `-i ${trimmedName} `;
-        filterComplex += `[${i}:v][${i}:a]`;
+
+        // Trim the video
+        await ffmpeg.exec([
+          '-i', 'input.mp4',
+          '-ss', `${start}`,
+          '-to', `${end}`,
+          '-c', 'copy',
+          trimmedName
+        ]);
+
+        concatFileContent += `file ${trimmedName}\n`;
       }
 
-      filterComplex += `concat=n=${selectedSections.length}:v=1:a=1[outv][outa]`;
-      await ffmpeg.exec([...inputParts.split(' '), '-filter_complex', filterComplex, '-map', '[outv]', '-map', '[outa]', outputFileName]);
+      await ffmpeg.writeFile('concat_list.txt', concatFileContent);
 
-      const data = await ffmpeg.readFile(outputFileName);
+      // Concatenate all trimmed parts
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat_list.txt',
+        '-c', 'copy',
+        'output.mp4'
+      ]);
+
+      // Read the output file
+      const data = await ffmpeg.readFile('output.mp4');
       const blob = new Blob([data], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
 
+      // Trigger download
       const link = document.createElement('a');
       link.href = url;
       link.download = 'merged_video.mp4';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
     } catch (error) {
       console.error('Error merging video sections:', error);
       setError('Failed to merge video sections. Please try again.');
@@ -257,7 +246,7 @@ const App: React.FC = () => {
             onClick={handleMergeSections}
             disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
           >
-            {isConverting ? 'Processing...' : 'Merge Sections'}
+            {isConverting ? 'Merging...' : 'Merge'}
           </button>
           <button
             onClick={handleMp4ToMp3Conversion}
