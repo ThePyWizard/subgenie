@@ -192,8 +192,46 @@ const App: React.FC = () => {
     }
   };
 
+  const mergeSelectedSections = async () => {
+    if (selectedSections.length === 0) return null;
+
+    // Sort selected sections by start time
+    const sortedSections = [...selectedSections].sort((a, b) => a.start - b.start);
+
+    // Create a file with a list of video parts to concatenate
+    let concatFileContent = '';
+    for (let i = 0; i < sortedSections.length; i++) {
+      const { start, end } = sortedSections[i];
+      const trimmedName = `trimmed${i}.mp4`;
+
+      // Trim the video
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-ss', `${start}`,
+        '-to', `${end}`,
+        '-c', 'copy',
+        trimmedName
+      ]);
+
+      concatFileContent += `file ${trimmedName}\n`;
+    }
+
+    await ffmpeg.writeFile('concat_list.txt', concatFileContent);
+
+    // Concatenate all trimmed parts
+    await ffmpeg.exec([
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', 'concat_list.txt',
+      '-c', 'copy',
+      'merged.mp4'
+    ]);
+
+    return 'merged.mp4';
+  };
+
   const handleMp4ToMp3Conversion = async () => {
-    if (!videoSrc || selectedSections.length === 0 || !ffmpegLoaded) return;
+    if (!videoSrc || !ffmpegLoaded) return;
 
     setIsConverting(true);
     setError(null);
@@ -202,15 +240,26 @@ const App: React.FC = () => {
     try {
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
 
-      await ffmpeg.exec(['-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', '-q:a', '2', 'output.mp3']);
+      let inputFile = 'input.mp4';
+      let outputFileName = 'converted_audio.mp3';
 
-      const data = await ffmpeg.readFile('output.mp3');
+      if (selectedSections.length > 0) {
+        inputFile = await mergeSelectedSections();
+        if (!inputFile) {
+          throw new Error('Failed to merge selected sections');
+        }
+        outputFileName = 'trimmed_converted_audio.mp3';
+      }
+
+      await ffmpeg.exec(['-i', inputFile, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputFileName]);
+
+      const data = await ffmpeg.readFile(outputFileName);
       const blob = new Blob([data], { type: 'audio/mp3' });
       const url = URL.createObjectURL(blob);
 
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'converted_audio.mp3';
+      link.download = outputFileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -246,11 +295,11 @@ const App: React.FC = () => {
             onClick={handleMergeSections}
             disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
           >
-            {isConverting ? 'Merging...' : 'Merge'}
+            {isConverting ? 'Merging...' : 'Merge Selected Sections'}
           </button>
           <button
             onClick={handleMp4ToMp3Conversion}
-            disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
+            disabled={!ffmpegLoaded || isConverting}
           >
             {isConverting ? 'Converting...' : 'Convert to MP3'}
           </button>
