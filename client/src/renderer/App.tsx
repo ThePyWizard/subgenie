@@ -5,6 +5,19 @@ import './App.css';
 
 const ffmpeg = new FFmpeg();
 
+interface Subtitle {
+  start: number; // Start time in seconds
+  end: number;   // End time in seconds
+  text: string;  // Subtitle text
+}
+
+const dummySubtitles: Subtitle[] = [
+  { start: 0, end: 3.5, text: 'Hello, welcome to the video!' },
+  { start: 4, end: 7.5, text: 'This is a sample subtitle.' },
+  { start: 8, end: 11.5, text: 'Enjoy watching!' },
+  { start: 12, end: 15, text: 'Thank you for viewing.' },
+];
+
 const App: React.FC = () => {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -21,6 +34,16 @@ const App: React.FC = () => {
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const [subtitleText, setSubtitleText] = useState('')
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([
+    { start: 0, end: 3.5, text: 'Hello, welcome to the video!' },
+    { start: 4, end: 7.5, text: 'This is a sample subtitle.' },
+    { start: 8, end: 11.5, text: 'Enjoy watching!' },
+    { start: 12, end: 14.5, text: 'Thank you for viewing.' },
+    { start: 15, end: 18.5, text: 'Yoolooo.' },
+    { start: 19, end: 25.5, text: 'OMGGGG.' },
+    { start: 26, end: 36, text: 'Broooo.' },
+  ]);
 
   useEffect(() => {
     const loadFFmpeg = async () => {
@@ -52,8 +75,34 @@ const App: React.FC = () => {
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+      const current = videoRef.current.currentTime;
+      setCurrentTime(current);
+  
+      // Find the current subtitle
+      const currentSubtitle = subtitles.find(
+        (subtitle) => current >= subtitle.start && current <= subtitle.end
+      );
+  
+      if (currentSubtitle) {
+        setSubtitleText(currentSubtitle.text);
+      } else {
+        setSubtitleText(''); // Clear subtitle if no match
+      }
     }
+  };
+
+  const handleSubtitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    setSubtitleText(newText);
+  
+    // Find and update the current subtitle in the subtitles array
+    setSubtitles((prevSubtitles) =>
+      prevSubtitles.map((subtitle) =>
+        currentTime >= subtitle.start && currentTime <= subtitle.end
+          ? { ...subtitle, text: newText }
+          : subtitle
+      )
+    );
   };
 
   const handleLoadedMetadata = () => {
@@ -121,6 +170,7 @@ const App: React.FC = () => {
   const handleSplitSelection = () => {
     setSelectedSections([...selectedSections, { start: selectionStart, end: selectionEnd }]);
   };
+
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -307,13 +357,20 @@ const App: React.FC = () => {
         </div>
         {videoSrc ? (
           <>
-            <video
-              ref={videoRef}
-              src={videoSrc}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              className="video-player"
-            />
+            <div className="video-container">
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                className="video-player"
+              />
+              <textarea
+                className="subtitle-textbox"
+                value={subtitleText}
+                onChange={handleSubtitleChange}
+              />
+            </div>
             <div className="controls">
               <button onClick={handleRewind}>⏪</button>
               <button onClick={handlePlayPause}>{isPlaying ? '⏸' : '▶'}</button>
