@@ -449,6 +449,29 @@ const App: React.FC = () => {
     setRecordedChunks([]);
   };
 
+ const handleDownload = async () => {
+  const videoUrl = 'https://cdn.pixabay.com/video/2023/11/26/190776-888535446_large.mp4';
+
+  // Fetch the video content and convert it to a Blob
+  const response = await fetch(videoUrl);
+  const blob = await response.blob();
+  
+  // Create an anchor element to trigger the download
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'output-video.mp4'; // The default file name when downloaded
+  
+  // Append the link to the document, trigger the click, and then remove the link
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  // Clean up the object URL after download
+  URL.revokeObjectURL(link.href);
+};
+
+  
+
   return (
     <div className="video-editor">
       <div className="sidebar">
@@ -462,6 +485,13 @@ const App: React.FC = () => {
           onChange={handleFileSelect}
           style={{ display: 'none' }}
         />
+
+        <button
+          className="download-btn"
+          onClick={handleDownload}
+          style={{ marginLeft: 'auto' }}
+        >Download</button>
+
         {fileName && <p className="file-name">{fileName}</p>}
       </div>
       <div className="main-content">

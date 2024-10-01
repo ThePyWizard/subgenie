@@ -3,3 +3,8 @@ node_modules/
 
 /ce-vid.zip
 /ce-vid/
+
+package.json
+package-lock.json
+
+/server/venv

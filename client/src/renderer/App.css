@@ -292,3 +292,16 @@ body, html {
   max-width: 1000px;
   margin: 20px auto;
 }
+
+.download-btn {
+  background-color: #4CAF50; /* Green background */
+  border: none;
+  color: white; /* White text */
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 4px; /* Rounded corners */
+  width: 100%;
+}
