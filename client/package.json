@@ -104,12 +104,18 @@
     "@electron/notarize": "^2.3.2",
     "@ffmpeg/ffmpeg": "^0.12.10",
     "@ffmpeg/util": "^0.12.1",
+    "@types/jquery": "^3.5.31",
+    "@types/jqueryui": "^1.12.23",
+    "axios": "^1.7.7",
     "electron-debug": "^3.2.0",
     "electron-log": "^4.4.8",
     "electron-updater": "^6.1.4",
+    "jquery": "^3.7.1",
+    "jquery-ui": "^1.14.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.16.0",
+    "recordrtc": "^5.6.2",
     "tailwindcss": "^3.4.11"
   },
   "devDependencies": {

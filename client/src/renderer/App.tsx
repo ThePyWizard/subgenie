@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import './App.css';
+import axios from 'axios';
 
 const ffmpeg = new FFmpeg();
 
@@ -34,7 +35,12 @@ const App: React.FC = () => {
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const [subtitleText, setSubtitleText] = useState('')
+  const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
   const [subtitles, setSubtitles] = useState<Subtitle[]>([
     { start: 0, end: 3.5, text: 'Hello, welcome to the video!' },
     { start: 4, end: 7.5, text: 'This is a sample subtitle.' },
@@ -280,19 +286,19 @@ const App: React.FC = () => {
     return 'merged.mp4';
   };
 
-  const handleMp4ToMp3Conversion = async () => {
-    if (!videoSrc || !ffmpegLoaded) return;
-
+  const handleMp4ToMp3Conversion = async (): Promise<Blob | null> => {
+    if (!videoSrc || !ffmpegLoaded) return null;
+  
     setIsConverting(true);
     setError(null);
     setProgress(0);
-
+  
     try {
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
-
+  
       let inputFile = 'input.mp4';
       let outputFileName = 'converted_audio.mp3';
-
+  
       if (selectedSections.length > 0) {
         const mergedFile = await mergeSelectedSections();
         if (!mergedFile) {
@@ -301,25 +307,146 @@ const App: React.FC = () => {
         inputFile = mergedFile;
         outputFileName = 'trimmed_converted_audio.mp3';
       }
-
+  
       await ffmpeg.exec(['-i', inputFile, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputFileName]);
-
+  
       const data = await ffmpeg.readFile(outputFileName);
-      const blob = new Blob([data], { type: 'audio/mp3' });
-      const url = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = outputFileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      return new Blob([data], { type: 'audio/mp3' });
     } catch (error) {
       console.error('Error converting MP4 to MP3:', error);
       setError('Failed to convert MP4 to MP3. Please try again.');
+      return null;
     } finally {
       setIsConverting(false);
     }
+  };
+  const parseSRT = (srtContent: string): Subtitle[] => {
+    const subtitles: Subtitle[] = [];
+    const subtitleBlocks = srtContent.trim().split('\n\n');
+  
+    subtitleBlocks.forEach(block => {
+      const lines = block.split('\n');
+      if (lines.length >= 3) {
+        const [, timecodes, ...textLines] = lines;
+        const [start, end] = timecodes.split(' --> ').map(timeToSeconds);
+        subtitles.push({
+          start,
+          end,
+          text: textLines.join('\n')
+        });
+      }
+    });
+  
+    return subtitles;
+  };
+  
+  const timeToSeconds = (timeString: string): number => {
+    const [hours, minutes, secondsAndMs] = timeString.split(':');
+    const [seconds, ms] = secondsAndMs.split(',');
+    return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds) + parseInt(ms) / 1000;
+  };
+
+  const handleGenerateSubtitles = async () => {
+    if (!videoSrc || !ffmpegLoaded) return;
+  
+    setIsGeneratingSubtitles(true);
+    setError(null);
+    setProgress(0);
+  
+    try {
+      // Convert video to MP3 using the existing function
+      const mp3Blob = await handleMp4ToMp3Conversion();
+      
+      if (!mp3Blob) {
+        throw new Error('Failed to convert video to MP3');
+      }
+  
+      // Create FormData and append the MP3 file
+      const formData = new FormData();
+      formData.append('file', mp3Blob, `audio_${Date.now()}.mp3`);
+  
+      // Send MP3 to backend for transcription
+      const response = await axios.post('http://127.0.0.1:8000/transcribe', formData, {
+        headers: { 
+          'accept': 'application/json',
+          'Content-Type': 'multipart/form-data'
+        },
+      });
+  
+      // Parse the SRT response and update subtitles
+      const parsedSubtitles = parseSRT(response.data.srt_subtitles);
+      setSubtitles(parsedSubtitles);
+  
+    } catch (error) {
+      console.error('Error generating subtitles:', error);
+      setError('Failed to generate subtitles. Please try again.');
+    } finally {
+      setIsGeneratingSubtitles(false);
+    }
+  };
+
+  const startRecording = () => {
+    if (!videoContainerRef.current) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const video = videoRef.current;
+
+    if (!video || !ctx) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const stream = canvas.captureStream(30); // 30 FPS
+
+    mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+    mediaRecorderRef.current.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        setRecordedChunks((prev) => [...prev, event.data]);
+      }
+    };
+
+    mediaRecorderRef.current.start();
+    setIsRecording(true);
+
+    const drawVideo = () => {
+      if (isRecording) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Draw subtitles
+        ctx.fillStyle = 'white';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(subtitleText, canvas.width / 2, canvas.height - 50);
+
+        requestAnimationFrame(drawVideo);
+      }
+    };
+
+    drawVideo();
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const downloadRecordedVideo = () => {
+    if (recordedChunks.length === 0) return;
+
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    document.body.appendChild(a);
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'recorded-video-with-subtitles.webm';
+    a.click();
+    window.URL.revokeObjectURL(url);
+    setRecordedChunks([]);
   };
 
   return (
@@ -354,6 +481,12 @@ const App: React.FC = () => {
           >
             {isConverting ? 'Converting...' : 'Convert to MP3'}
           </button>
+          <button
+          onClick={handleGenerateSubtitles}
+          disabled={!ffmpegLoaded || isConverting || isGeneratingSubtitles || !videoSrc}
+        >
+          {isGeneratingSubtitles ? 'Generating Subtitles...' : 'Generate Subtitles'}
+        </button>
         </div>
         {videoSrc ? (
           <>
@@ -371,6 +504,7 @@ const App: React.FC = () => {
                 onChange={handleSubtitleChange}
               />
             </div>
+            
             <div className="controls">
               <button onClick={handleRewind}>⏪</button>
               <button onClick={handlePlayPause}>{isPlaying ? '⏸' : '▶'}</button>
@@ -422,16 +556,7 @@ const App: React.FC = () => {
               <button onClick={handleSplitSelection}>Split Video</button>
               <span>{formatTime(selectionStart)} - {formatTime(selectionEnd)}</span>
             </div>
-            <div className="sections-list">
-              <h3>Selected Sections:</h3>
-              <ul>
-                {selectedSections.map((section, index) => (
-                  <li key={index}>
-                    {formatTime(section.start)} - {formatTime(section.end)}
-                  </li>
-                ))}
-              </ul>
-            </div>
+
           </>
         ) : (
           <div className="placeholder">
