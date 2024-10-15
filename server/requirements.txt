@@ -1,2 +1,9 @@
-moviepy
-openai-whisper
+fastapi
+uvicorn
+openai==1.43.1
+openai-whisper==20231117
+torch
+aiofiles
+pydantic
+python-multipart
+ffmpeg-python
