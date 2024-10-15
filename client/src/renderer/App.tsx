@@ -387,7 +387,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleExportVideo = async () => {
+  const handleDownload = async () => {
     if (!videoSrc || !ffmpegLoaded || subtitles.length === 0) return;
 
     setIsExporting(true);
@@ -466,7 +466,7 @@ const App: React.FC = () => {
       </div>
       <div className="export-controls">
         <button 
-          onClick={handleExportVideo} 
+          onClick={handleDownload} 
           disabled={isExporting || !videoSrc || subtitles.length === 0 || !ffmpegLoaded}
         >
           {isExporting ? 'Exporting...' : 'Export Video with Subtitles'}
