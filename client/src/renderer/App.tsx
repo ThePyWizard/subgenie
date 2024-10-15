@@ -50,6 +50,8 @@ const App: React.FC = () => {
     { start: 19, end: 25.5, text: 'OMGGGG.' },
     { start: 26, end: 36, text: 'Broooo.' },
   ]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   useEffect(() => {
     const loadFFmpeg = async () => {
@@ -375,7 +377,7 @@ const App: React.FC = () => {
   
       // Parse the SRT response and update subtitles
       const parsedSubtitles = parseSRT(response.data.srt_subtitles);
-      setSubtitles(parsedSubtitles);
+      setSubtitles(parsedSubtitles);     
   
     } catch (error) {
       console.error('Error generating subtitles:', error);
@@ -385,92 +387,66 @@ const App: React.FC = () => {
     }
   };
 
-  const startRecording = () => {
-    if (!videoContainerRef.current) return;
+  const handleExportVideo = async () => {
+    if (!videoSrc || !ffmpegLoaded || subtitles.length === 0) return;
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const video = videoRef.current;
+    setIsExporting(true);
+    setError(null);
+    setExportProgress(0);
+    try {
+      // Use the FFmpeg instance from the outer scope
+      // Write video file to FFmpeg's virtual file system
+      await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
 
-    if (!video || !ctx) return;
+      // Generate SRT file content
+      const srtContent = subtitles.map((sub, index) => {
+        const startTime = formatSrtTime(sub.start);
+        const endTime = formatSrtTime(sub.end);
+        return `${index + 1}\n${startTime} --> ${endTime}\n${sub.text}\n\n`;
+      }).join('');
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+      // Write SRT file to FFmpeg's virtual file system
+      await ffmpeg.writeFile('subtitles.srt', srtContent);
 
-    const stream = canvas.captureStream(30); // 30 FPS
+      // Run FFmpeg command to burn subtitles into video
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-vf', 'subtitles=subtitles.srt:force_style=\'FontSize=24,FontName=Arial,PrimaryColour=&HFFFFFF&\'',
+        '-c:a', 'copy',
+        'output.mp4'
+      ]);
 
-    mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      // Read the output file
+      const data = await ffmpeg.readFile('output.mp4');
 
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        setRecordedChunks((prev) => [...prev, event.data]);
-      }
-    };
+      // Create a download link
+      const blob = new Blob([data], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'video_with_subtitles.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-
-    const drawVideo = () => {
-      if (isRecording) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Draw subtitles
-        ctx.fillStyle = 'white';
-        ctx.font = '24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(subtitleText, canvas.width / 2, canvas.height - 50);
-
-        requestAnimationFrame(drawVideo);
-      }
-    };
-
-    drawVideo();
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+    } catch (error) {
+      console.error('Error exporting video with subtitles:', error);
+      setError('Failed to export video with subtitles. Please try again.');
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
     }
   };
-
-  const downloadRecordedVideo = () => {
-    if (recordedChunks.length === 0) return;
-
-    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    document.body.appendChild(a);
-    a.style.display = 'none';
-    a.href = url;
-    a.download = 'recorded-video-with-subtitles.webm';
-    a.click();
-    window.URL.revokeObjectURL(url);
-    setRecordedChunks([]);
+  const formatSrtTime = (seconds: number) => {
+    const date = new Date(seconds * 1000);
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const secs = date.getUTCSeconds().toString().padStart(2, '0');
+    const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
+    return `${hours}:${minutes}:${secs},${ms}`;
   };
 
- const handleDownload = async () => {
-  const videoUrl = 'https://cdn.pixabay.com/video/2023/11/26/190776-888535446_large.mp4';
-
-  // Fetch the video content and convert it to a Blob
-  const response = await fetch(videoUrl);
-  const blob = await response.blob();
-  
-  // Create an anchor element to trigger the download
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'output-video.mp4'; // The default file name when downloaded
-  
-  // Append the link to the document, trigger the click, and then remove the link
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  // Clean up the object URL after download
-  URL.revokeObjectURL(link.href);
-};
-
-  
 
   return (
     <div className="video-editor">
@@ -486,13 +462,24 @@ const App: React.FC = () => {
           style={{ display: 'none' }}
         />
 
-        <button
-          className="download-btn"
-          onClick={handleDownload}
-          style={{ marginLeft: 'auto' }}
-        >Download</button>
-
         {fileName && <p className="file-name">{fileName}</p>}
+      </div>
+      <div className="export-controls">
+        <button 
+          onClick={handleExportVideo} 
+          disabled={isExporting || !videoSrc || subtitles.length === 0 || !ffmpegLoaded}
+        >
+          {isExporting ? 'Exporting...' : 'Export Video with Subtitles'}
+        </button>
+        {isExporting && (
+          <div className="progress-bar-container">
+            <div 
+              className="progress-bar" 
+              style={{ width: `${exportProgress}%` }}
+            ></div>
+            <span>{exportProgress}%</span>
+          </div>
+        )}
       </div>
       <div className="main-content">
         <div className="top-bar">
@@ -534,6 +521,7 @@ const App: React.FC = () => {
                 onChange={handleSubtitleChange}
               />
             </div>
+            
             
             <div className="controls">
               <button onClick={handleRewind}>⏪</button>
