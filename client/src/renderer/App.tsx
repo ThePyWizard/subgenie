@@ -3,6 +3,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import './App.css';
 import axios from 'axios';
+import { CirclePlay, CirclePause } from 'lucide-react';
 
 const ffmpeg = new FFmpeg();
 
@@ -20,7 +21,7 @@ const dummySubtitles: Subtitle[] = [
 ];
 
 const App: React.FC = () => {
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
   const [fileName, setFileName] = useState<string>('');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -77,7 +78,8 @@ const App: React.FC = () => {
     const file = event.target.files?.[0];
     if (file && file.type === 'video/mp4') {
       setVideoSrc(URL.createObjectURL(file));
-      setFileName(file.name);
+      const fileNameWithoutExtension = file.name.split('.').slice(0, -1).join('.');
+      setFileName(fileNameWithoutExtension);
     }
   };
 
@@ -85,12 +87,12 @@ const App: React.FC = () => {
     if (videoRef.current) {
       const current = videoRef.current.currentTime;
       setCurrentTime(current);
-  
+
       // Find the current subtitle
       const currentSubtitle = subtitles.find(
         (subtitle) => current >= subtitle.start && current <= subtitle.end
       );
-  
+
       if (currentSubtitle) {
         setSubtitleText(currentSubtitle.text);
       } else {
@@ -102,7 +104,7 @@ const App: React.FC = () => {
   const handleSubtitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setSubtitleText(newText);
-  
+
     // Find and update the current subtitle in the subtitles array
     setSubtitles((prevSubtitles) =>
       prevSubtitles.map((subtitle) =>
@@ -290,17 +292,17 @@ const App: React.FC = () => {
 
   const handleMp4ToMp3Conversion = async (): Promise<Blob | null> => {
     if (!videoSrc || !ffmpegLoaded) return null;
-  
+
     setIsConverting(true);
     setError(null);
     setProgress(0);
-  
+
     try {
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
-  
+
       let inputFile = 'input.mp4';
       let outputFileName = 'converted_audio.mp3';
-  
+
       if (selectedSections.length > 0) {
         const mergedFile = await mergeSelectedSections();
         if (!mergedFile) {
@@ -309,9 +311,9 @@ const App: React.FC = () => {
         inputFile = mergedFile;
         outputFileName = 'trimmed_converted_audio.mp3';
       }
-  
+
       await ffmpeg.exec(['-i', inputFile, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outputFileName]);
-  
+
       const data = await ffmpeg.readFile(outputFileName);
       return new Blob([data], { type: 'audio/mp3' });
     } catch (error) {
@@ -325,7 +327,7 @@ const App: React.FC = () => {
   const parseSRT = (srtContent: string): Subtitle[] => {
     const subtitles: Subtitle[] = [];
     const subtitleBlocks = srtContent.trim().split('\n\n');
-  
+
     subtitleBlocks.forEach(block => {
       const lines = block.split('\n');
       if (lines.length >= 3) {
@@ -338,10 +340,10 @@ const App: React.FC = () => {
         });
       }
     });
-  
+
     return subtitles;
   };
-  
+
   const timeToSeconds = (timeString: string): number => {
     const [hours, minutes, secondsAndMs] = timeString.split(':');
     const [seconds, ms] = secondsAndMs.split(',');
@@ -350,35 +352,35 @@ const App: React.FC = () => {
 
   const handleGenerateSubtitles = async () => {
     if (!videoSrc || !ffmpegLoaded) return;
-  
+
     setIsGeneratingSubtitles(true);
     setError(null);
     setProgress(0);
-  
+
     try {
       // Convert video to MP3 using the existing function
       const mp3Blob = await handleMp4ToMp3Conversion();
-      
+
       if (!mp3Blob) {
         throw new Error('Failed to convert video to MP3');
       }
-  
+
       // Create FormData and append the MP3 file
       const formData = new FormData();
       formData.append('file', mp3Blob, `audio_${Date.now()}.mp3`);
-  
+
       // Send MP3 to backend for transcription
       const response = await axios.post('http://127.0.0.1:8000/transcribe', formData, {
-        headers: { 
+        headers: {
           'accept': 'application/json',
           'Content-Type': 'multipart/form-data'
         },
       });
-  
+
       // Parse the SRT response and update subtitles
       const parsedSubtitles = parseSRT(response.data.srt_subtitles);
-      setSubtitles(parsedSubtitles);     
-  
+      setSubtitles(parsedSubtitles);
+
     } catch (error) {
       console.error('Error generating subtitles:', error);
       setError('Failed to generate subtitles. Please try again.');
@@ -447,96 +449,74 @@ const App: React.FC = () => {
     return `${hours}:${minutes}:${secs},${ms}`;
   };
 
-
   return (
     <div className="video-editor">
       <div className="sidebar">
-        <button className="import-btn" onClick={() => document.getElementById('fileInput')?.click()}>
-          Import Media
-        </button>
-        <input
-          id="fileInput"
-          type="file"
-          accept="video/mp4"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-
-        {fileName && <p className="file-name">{fileName}</p>}
-      </div>
-      <div className="export-controls">
-        <button 
-          onClick={handleDownload} 
-          disabled={isExporting || !videoSrc || subtitles.length === 0 || !ffmpegLoaded}
-        >
-          {isExporting ? 'Exporting...' : 'Export Video with Subtitles'}
-        </button>
-        {isExporting && (
-          <div className="progress-bar-container">
-            <div 
-              className="progress-bar" 
-              style={{ width: `${exportProgress}%` }}
-            ></div>
-            <span>{exportProgress}%</span>
+        <h2 className="file-name">{fileName || 'No file selected'}</h2>
+        <div className="info-chips">
+          <span className="chip">English</span>
+          <span className="chip">{formatTime(duration)}</span>
+        </div>
+        <div className="button-group">
+          <div className="dropdown">
+            <select className="button" style={{ borderRadius: 'var(--radius)', width: '150px', height: '40px', display: 'inline-block' }}>
+              <option value="English">Select Language</option>
+              <option value="English">English</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+            </select>
           </div>
-        )}
+          <button className="button" onClick={handleGenerateSubtitles} style={{ width: '150px', height: '40px', display: 'inline-block', textAlign: 'center', padding: '0' }}>Generate Subtitles</button>
+        </div>
+        <div className="subtitle-card">
+          {subtitles.map((subtitle, index) => (
+            <div key={index} className="subtitle-item">
+              <span className="subtitle-time">
+                {formatTime(subtitle.start)} - {formatTime(subtitle.end)}
+              </span>
+              <span>{subtitle.text}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="main-content">
-        <div className="top-bar">
-          <h2>Video Editor</h2>
-          {error && <div className="error-message">{error}</div>}
-          {isConverting && <div className="progress-bar" style={{ width: `${progress}%` }}></div>}
-          <button
-            onClick={handleMergeSections}
-            disabled={!ffmpegLoaded || isConverting || selectedSections.length === 0}
-          >
-            {isConverting ? 'Merging...' : 'Merge Selected Sections'}
+        <div className="export-controls">
+          <button className="button" onClick={() => document.getElementById('fileInput')?.click()}>
+            Import Media
           </button>
-          <button
-            onClick={handleMp4ToMp3Conversion}
-            disabled={!ffmpegLoaded || isConverting}
-          >
-            {isConverting ? 'Converting...' : 'Convert to MP3'}
+          <input
+            id="fileInput"
+            type="file"
+            accept="video/mp4"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button className="button" onClick={handleDownload}>
+            Export with Burned Subtitles
           </button>
-          <button
-          onClick={handleGenerateSubtitles}
-          disabled={!ffmpegLoaded || isConverting || isGeneratingSubtitles || !videoSrc}
-        >
-          {isGeneratingSubtitles ? 'Generating Subtitles...' : 'Generate Subtitles'}
-        </button>
         </div>
-        {videoSrc ? (
-          <>
-            <div className="video-container">
-              <video
-                ref={videoRef}
-                src={videoSrc}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                className="video-player"
-              />
-              <textarea
-                className="subtitle-textbox"
-                value={subtitleText}
-                onChange={handleSubtitleChange}
-              />
-            </div>
-            
-            
-            <div className="controls">
-              <button onClick={handleRewind}>⏪</button>
-              <button onClick={handlePlayPause}>{isPlaying ? '⏸' : '▶'}</button>
-              <button onClick={handleFastForward}>⏩</button>
-            </div>
-            <div
-              className="timeline-container"
-              ref={timelineRef}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            >
-              <div className="timeline" onClick={handleTimelineClick}>
+        <div className="video-preview">
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            className="video-player"
+          />
+
+          <div className="timeline-container">
+            <div className="timeline-wrapper">
+              <span className="time-label start">{formatTime(0)}</span>
+              <div
+                className="timeline"
+                ref={timelineRef}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onClick={handleTimelineClick}
+              >
                 <div className="progress" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
+                <div className="playhead" style={{ left: `${(currentTime / duration) * 100}%`, width: '24px', height: '24px' }}></div> {/* Increased size of playhead */}
                 {selectedSections.map((section, index) => (
                   <div
                     key={index}
@@ -565,22 +545,27 @@ const App: React.FC = () => {
                   }}
                 ></div>
               </div>
+              <span className="time-label end">{formatTime(duration)}</span>
             </div>
-            <div className="time-display">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-            <div className="split-controls">
-              <button onClick={handleSplitSelection}>Split Video</button>
-              <span>{formatTime(selectionStart)} - {formatTime(selectionEnd)}</span>
-            </div>
-
-          </>
-        ) : (
-          <div className="placeholder">
-            <p>Import media to start editing</p>
+            <div className="current-time">{formatTime(currentTime)}</div>
           </div>
-        )}
+        </div>
+        
+        <div className="controls">
+          <button className='button' style={{ width: '150px', height: '40px' }} onClick={handleRewind}>-5s</button>
+          <button className='button' style={{ width: '150px', height: '40px' }} onClick={handlePlayPause}>{isPlaying ? <CirclePause /> : <CirclePlay />}</button>
+          <button className='button' style={{ width: '150px', height: '40px' }} onClick={handleFastForward}>+5s</button>
+          {/* <select className="button" style={{ borderRadius: 'var(--radius)', height: '40px', display: 'inline-block' }}>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select> */}
+        </div>
+        <div className="button-group" style={{ marginTop: '1rem' }}>
+          <button className="button" onClick={handleSplitSelection}>Select Split Sections</button>
+          <button className="button" onClick={handleMergeSections}>Merge Selection</button>
+        </div>
       </div>
     </div>
   );
