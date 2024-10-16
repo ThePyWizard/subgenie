@@ -448,50 +448,49 @@ const App: React.FC = () => {
       // Write video file to FFmpeg's virtual file system
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
 
-      // Generate ASS subtitle file content (Advanced SubStation Alpha)
-      const assContent = `[Script Info]
-ScriptType: v4.00+
-PlayResX: 384
-PlayResY: 288
-ScaledBorderAndShadow: yes
+      // Generate SRT subtitle content
+      const srtContent = subtitles.map((sub, index) => {
+        const start = formatSrtTime(sub.start);
+        const end = formatSrtTime(sub.end);
+        return `${index + 1}\n${start} --> ${end}\n${sub.text}\n`;
+      }).join('\n');
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-${subtitles.map(sub => {
-        const start = formatAssTime(sub.start);
-        const end = formatAssTime(sub.end);
-        return `Dialogue: 0,${start},${end},Default,,0,0,0,,${sub.text.replace(/\n/g, '\\N')}`;
-      }).join('\n')}`;
-
-      // Write ASS file to FFmpeg's virtual file system
-      await ffmpeg.writeFile('subtitles.ass', assContent);
+      // Write SRT file to FFmpeg's virtual file system
+      await ffmpeg.writeFile('subtitles.srt', srtContent);
 
       // Run FFmpeg command to burn subtitles into video
       await ffmpeg.exec([
         '-i', 'input.mp4',
-        '-vf', `ass=subtitles.ass:fontsdir=/fonts,scale=1280:720`,
+        '-vf', `subtitles=subtitles.srt:force_style='FontName=Arial,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H000000FF,BorderStyle=3'`,
         '-c:a', 'copy',
         '-preset', 'fast',
         'output.mp4'
       ]);
 
-      // Read the output file
-      const data = await ffmpeg.readFile('output.mp4');
+      // Read the output video file
+      const videoData = await ffmpeg.readFile('output.mp4');
 
-      // Create a download link
-      const blob = new Blob([data], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'video_with_subtitles.mp4';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Create a download link for the video
+      const videoBlob = new Blob([videoData], { type: 'video/mp4' });
+      const videoUrl = URL.createObjectURL(videoBlob);
+      const videoLink = document.createElement('a');
+      videoLink.href = videoUrl;
+      videoLink.download = 'video_with_subtitles.mp4';
+      document.body.appendChild(videoLink);
+      videoLink.click();
+      document.body.removeChild(videoLink);
+      URL.revokeObjectURL(videoUrl);
+
+      // Create a download link for the SRT file
+      const srtBlob = new Blob([srtContent], { type: 'text/plain' });
+      const srtUrl = URL.createObjectURL(srtBlob);
+      const srtLink = document.createElement('a');
+      srtLink.href = srtUrl;
+      srtLink.download = 'subtitles.srt';
+      document.body.appendChild(srtLink);
+      srtLink.click();
+      document.body.removeChild(srtLink);
+      URL.revokeObjectURL(srtUrl);
 
     } catch (error) {
       console.error('Error exporting video with subtitles:', error);
@@ -625,9 +624,9 @@ ${subtitles.map(sub => {
                 style={{ height: '22px' }} // Increased height of the timeline
               >
                 <div className="progress" style={{ width: `${(currentTime / duration) * 100}%`, height: '100%' }}></div>
-                <div className="playhead" style={{ left: `${(currentTime / duration) * 100}%`, width: '28px', height: '28px', backgroundColor: 'white', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <div style={{ width: '12px', height: '12px', backgroundColor: '#0056b3', borderRadius: '4px' }}></div>
-                </div> {/* Changed playhead to white square with a blue square at its center */}
+                <div className="playhead" style={{ left: `${(currentTime / duration) * 100}%`, width: '28px', height: '28px', backgroundColor: 'white', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <div style={{ width: '12px', height: '12px', backgroundColor: '#0070f3', borderRadius: '50%', color: 'white' }}></div>
+                </div> {/* Changed playhead to white circle with a blue circle at its center */}
                 {selectedSections.map((section, index) => (
                   <div
                     key={index}
