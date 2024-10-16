@@ -82,7 +82,7 @@ body {
   cursor: not-allowed;
 }
 
-.subtitle-card {
+/* .subtitle-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   height: calc(100vh - 250px);
@@ -98,6 +98,65 @@ body {
 .subtitle-time {
   width: 150px;
   font-family: monospace;
+} */
+
+.subtitle-card {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+  max-height: 650px; /* Increased max-height for more content visibility */
+}
+
+.subtitle-item {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.3s ease;
+}
+
+.subtitle-item:hover {
+  background-color: #f1f1f1;
+}
+
+.subtitle-time {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+  font-size: 14px;
+  background-color: #e0e0e0;
+  padding: 5px;
+  border-radius: 4px;
+  text-align: center;
+  width: 125px; /* Shortened the width further */
+  margin: 0 auto; /* Centered the element */
+}
+
+.subtitle-text {
+  color: #555;
+  font-size: 16px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.subtitle-card::-webkit-scrollbar {
+  width: 8px;
+}
+
+.subtitle-card::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.subtitle-card::-webkit-scrollbar-track {
+  background-color: #f9f9f9;
 }
 
 .video-preview {
@@ -239,4 +298,20 @@ body {
   height: 100%;
   background-color: rgba(0, 112, 243, 0.2);
   z-index: 1;
+}
+
+.selected-sections {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.selected-section-item {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  font-family: monospace;
 }

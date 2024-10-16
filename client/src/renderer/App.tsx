@@ -3,7 +3,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import './App.css';
 import axios from 'axios';
-import { CirclePlay, CirclePause } from 'lucide-react';
+import { CirclePlay, CirclePause, Loader } from 'lucide-react';
 
 const ffmpeg = new FFmpeg();
 
@@ -12,13 +12,6 @@ interface Subtitle {
   end: number;   // End time in seconds
   text: string;  // Subtitle text
 }
-
-const dummySubtitles: Subtitle[] = [
-  { start: 0, end: 3.5, text: 'Hello, welcome to the video!' },
-  { start: 4, end: 7.5, text: 'This is a sample subtitle.' },
-  { start: 8, end: 11.5, text: 'Enjoy watching!' },
-  { start: 12, end: 15, text: 'Thank you for viewing.' },
-];
 
 const App: React.FC = () => {
   const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
@@ -30,7 +23,7 @@ const App: React.FC = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [selectionStart, setSelectionStart] = useState(0);
   const [selectionEnd, setSelectionEnd] = useState(0);
-  const [isDragging, setIsDragging] = useState<'start' | 'end' | null>(null);
+  const [isDragging, setIsDragging] = useState<'start' | 'end' | 'head' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
@@ -42,17 +35,11 @@ const App: React.FC = () => {
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const [subtitleText, setSubtitleText] = useState('')
   const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
-  const [subtitles, setSubtitles] = useState<Subtitle[]>([
-    { start: 0, end: 3.5, text: 'Hello, welcome to the video!' },
-    { start: 4, end: 7.5, text: 'This is a sample subtitle.' },
-    { start: 8, end: 11.5, text: 'Enjoy watching!' },
-    { start: 12, end: 14.5, text: 'Thank you for viewing.' },
-    { start: 15, end: 18.5, text: 'Yoolooo.' },
-    { start: 19, end: 25.5, text: 'OMGGGG.' },
-    { start: 26, end: 36, text: 'Broooo.' },
-  ]);
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [isMerging, setIsMerging] = useState(false);
+  const videoOverlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadFFmpeg = async () => {
@@ -71,8 +58,42 @@ const App: React.FC = () => {
         setError('Failed to load FFmpeg. Please try reloading the page.');
       }
     };
+
     loadFFmpeg();
-  }, []);
+
+    // Cleanup function to revoke the object URL when videoSrc changes or component unmounts
+    return () => {
+      if (videoSrc) {
+        URL.revokeObjectURL(videoSrc);
+      }
+    };
+  }, [videoSrc]);
+
+  const formatTimeHHMMSS = (time: number) => {
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
+    const seconds = Math.floor(time % 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleClearSelection = () => {
+    if (videoSrc) {
+      URL.revokeObjectURL(videoSrc);
+    }
+    setSelectedSections([]);
+    setSelectionStart(0);
+    setSelectionEnd(duration);
+    setSubtitleText('');
+    setVideoSrc(undefined);
+    setFileName('');
+    setDuration(0);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setIsConverting(false);
+    setIsGeneratingSubtitles(false);
+    setIsExporting(false);
+    setExportProgress(0);
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -101,18 +122,35 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSubtitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleSubtitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>, index?: number) => {
     const newText = e.target.value;
     setSubtitleText(newText);
 
     // Find and update the current subtitle in the subtitles array
     setSubtitles((prevSubtitles) =>
-      prevSubtitles.map((subtitle) =>
-        currentTime >= subtitle.start && currentTime <= subtitle.end
-          ? { ...subtitle, text: newText }
-          : subtitle
+      prevSubtitles.map((subtitle, i) =>
+        index !== undefined
+          ? i === index
+            ? { ...subtitle, text: newText }
+            : subtitle
+          : currentTime >= subtitle.start && currentTime <= subtitle.end
+            ? { ...subtitle, text: newText }
+            : subtitle
       )
     );
+  };
+
+  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'start' | 'end', index: number) => {
+    const newValue = parseFloat(e.target.value);
+    if (!isNaN(newValue)) {
+      setSubtitles((prevSubtitles) =>
+        prevSubtitles.map((subtitle, i) =>
+          i === index
+            ? { ...subtitle, [type]: newValue }
+            : subtitle
+        )
+      );
+    }
   };
 
   const handleLoadedMetadata = () => {
@@ -135,13 +173,13 @@ const App: React.FC = () => {
 
   const handleFastForward = () => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, duration);
+      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 5, duration);
     }
   };
 
   const handleRewind = () => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 5, 0);
     }
   };
 
@@ -155,12 +193,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, type: 'start' | 'end') => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, type: 'start' | 'end' | 'head') => {
     setIsDragging(type);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDragging && timelineRef.current) {
+    if (isDragging && timelineRef.current && videoRef.current) {
       const rect = timelineRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const newTime = Math.max(0, Math.min((x / rect.width) * duration, duration));
@@ -169,6 +207,9 @@ const App: React.FC = () => {
         setSelectionStart(Math.min(newTime, selectionEnd));
       } else if (isDragging === 'end') {
         setSelectionEnd(Math.max(newTime, selectionStart));
+      } else if (isDragging === 'head') {
+        videoRef.current.currentTime = newTime;
+        setCurrentTime(newTime);
       }
     }
   };
@@ -236,13 +277,20 @@ const App: React.FC = () => {
       const blob = new Blob([data], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
 
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'merged_video.mp4';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Update the videoSrc with the new merged video
+      setVideoSrc(url);
+
+      // Reset selection and update duration
+      setSelectedSections([]);
+      setSelectionStart(0);
+      if (videoRef.current) {
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current) {
+            setDuration(videoRef.current.duration);
+            setSelectionEnd(videoRef.current.duration);
+          }
+        };
+      }
 
     } catch (error) {
       console.error('Error merging video sections:', error);
@@ -395,26 +443,39 @@ const App: React.FC = () => {
     setIsExporting(true);
     setError(null);
     setExportProgress(0);
+
     try {
-      // Use the FFmpeg instance from the outer scope
       // Write video file to FFmpeg's virtual file system
       await ffmpeg.writeFile('input.mp4', await fetchFile(videoSrc));
 
-      // Generate SRT file content
-      const srtContent = subtitles.map((sub, index) => {
-        const startTime = formatSrtTime(sub.start);
-        const endTime = formatSrtTime(sub.end);
-        return `${index + 1}\n${startTime} --> ${endTime}\n${sub.text}\n\n`;
-      }).join('');
+      // Generate ASS subtitle file content (Advanced SubStation Alpha)
+      const assContent = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 384
+PlayResY: 288
+ScaledBorderAndShadow: yes
 
-      // Write SRT file to FFmpeg's virtual file system
-      await ffmpeg.writeFile('subtitles.srt', srtContent);
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,24,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+${subtitles.map(sub => {
+        const start = formatAssTime(sub.start);
+        const end = formatAssTime(sub.end);
+        return `Dialogue: 0,${start},${end},Default,,0,0,0,,${sub.text.replace(/\n/g, '\\N')}`;
+      }).join('\n')}`;
+
+      // Write ASS file to FFmpeg's virtual file system
+      await ffmpeg.writeFile('subtitles.ass', assContent);
 
       // Run FFmpeg command to burn subtitles into video
       await ffmpeg.exec([
         '-i', 'input.mp4',
-        '-vf', 'subtitles=subtitles.srt:force_style=\'FontSize=24,FontName=Arial,PrimaryColour=&HFFFFFF&\'',
+        '-vf', `ass=subtitles.ass:fontsdir=/fonts,scale=1280:720`,
         '-c:a', 'copy',
+        '-preset', 'fast',
         'output.mp4'
       ]);
 
@@ -440,6 +501,16 @@ const App: React.FC = () => {
       setExportProgress(0);
     }
   };
+
+  const formatAssTime = (seconds: number) => {
+    const date = new Date(seconds * 1000);
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const secs = date.getUTCSeconds().toString().padStart(2, '0');
+    const ms = Math.floor(date.getUTCMilliseconds() / 10).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${secs}.${ms}`;
+  };
+
   const formatSrtTime = (seconds: number) => {
     const date = new Date(seconds * 1000);
     const hours = date.getUTCHours().toString().padStart(2, '0');
@@ -466,18 +537,25 @@ const App: React.FC = () => {
               <option value="French">French</option>
             </select>
           </div>
-          <button className="button" onClick={handleGenerateSubtitles} style={{ width: '150px', height: '40px', display: 'inline-block', textAlign: 'center', padding: '0' }}>Generate Subtitles</button>
+          <button
+            className="button"
+            onClick={handleGenerateSubtitles}
+            disabled={isGeneratingSubtitles}
+            style={{ width: '150px', height: '40px', display: 'inline-block', textAlign: 'center', padding: '0' }}
+          >
+            {isGeneratingSubtitles ? <Loader className="animate-spin" /> : 'Generate Subtitles'}
+          </button>
         </div>
+
         <div className="subtitle-card">
           {subtitles.map((subtitle, index) => (
             <div key={index} className="subtitle-item">
-              <span className="subtitle-time">
-                {formatTime(subtitle.start)} - {formatTime(subtitle.end)}
-              </span>
-              <span>{subtitle.text}</span>
+              <textarea className="subtitle-time" value={`${formatTime(subtitle.start)} - ${formatTime(subtitle.end)}`} style={{ resize: 'none' }}></textarea>
+              <div className="subtitle-text">{subtitle.text}</div>
             </div>
           ))}
         </div>
+
       </div>
       <div className="main-content">
         <div className="export-controls">
@@ -491,11 +569,16 @@ const App: React.FC = () => {
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
-          <button className="button" onClick={handleDownload}>
-            Export with Burned Subtitles
+          <button
+            className="button"
+            onClick={handleDownload}
+            disabled={isExporting}
+          >
+            {isExporting ? <Loader className="animate-spin" /> : 'Export with Burned Subtitles'}
           </button>
         </div>
-        <div className="video-preview">
+        <div className="video-preview" style={{ position: 'relative' }}>
+
           <video
             ref={videoRef}
             src={videoSrc}
@@ -504,9 +587,34 @@ const App: React.FC = () => {
             className="video-player"
           />
 
+          {/* Subtitle Textarea */}
+          <textarea
+            style={{
+              position: 'absolute',
+              top: '75%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '80%',
+              padding: '10px',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              color: 'white',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              borderRadius: '5px',
+              fontSize: '16px',
+              zIndex: '1' // Ensure it's on top of the video
+            }}
+            value={subtitleText}
+            onChange={handleSubtitleChange}
+          />
+
+          {/* Subtitle Overlay (Optional, for reference or styling) */}
+          <div className="video-overlay" ref={videoOverlayRef}></div>
+
           <div className="timeline-container">
             <div className="timeline-wrapper">
-              <span className="time-label start">{formatTime(0)}</span>
+              <span className="time-label start" style={{ transform: 'translate(-5px, 8px)' }}>{formatTime(currentTime)}</span>
               <div
                 className="timeline"
                 ref={timelineRef}
@@ -514,43 +622,48 @@ const App: React.FC = () => {
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
                 onClick={handleTimelineClick}
+                style={{ height: '22px' }} // Increased height of the timeline
               >
-                <div className="progress" style={{ width: `${(currentTime / duration) * 100}%` }}></div>
-                <div className="playhead" style={{ left: `${(currentTime / duration) * 100}%`, width: '24px', height: '24px' }}></div> {/* Increased size of playhead */}
+                <div className="progress" style={{ width: `${(currentTime / duration) * 100}%`, height: '100%' }}></div>
+                <div className="playhead" style={{ left: `${(currentTime / duration) * 100}%`, width: '28px', height: '28px', backgroundColor: 'white', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <div style={{ width: '12px', height: '12px', backgroundColor: '#0056b3', borderRadius: '4px' }}></div>
+                </div> {/* Changed playhead to white square with a blue square at its center */}
                 {selectedSections.map((section, index) => (
                   <div
                     key={index}
                     className="selected-section"
                     style={{
-                      left: `${(section.start / duration) * 100}%`,
-                      width: `${((section.end - section.start) / duration) * 100}%`,
+                      left: `${((section.start - currentTime) / duration) * 100}%`,
+                      width: `${(((section.end - currentTime) - (section.start - currentTime)) / duration) * 100}%`,
+                      height: '100%', // Adjusted height to match the increased timeline height
                     }}
                   ></div>
                 ))}
                 <div
                   className="selection-bar start"
-                  style={{ left: `${(selectionStart / duration) * 100}%` }}
+                  style={{ left: `${((selectionStart - currentTime) / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'start')}
                 ></div>
                 <div
                   className="selection-bar end"
-                  style={{ left: `${(selectionEnd / duration) * 100}%` }}
+                  style={{ left: `${((selectionEnd - currentTime) / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'end')}
                 ></div>
                 <div
                   className="selection-range"
                   style={{
-                    left: `${(selectionStart / duration) * 100}%`,
-                    width: `${((selectionEnd - selectionStart) / duration) * 100}%`,
+                    left: `${((selectionStart - currentTime) / duration) * 100}%`,
+                    width: `${(((selectionEnd - currentTime) - (selectionStart - currentTime)) / duration) * 100}%`,
+                    height: '100%', // Adjusted height to match the increased timeline height
                   }}
                 ></div>
               </div>
-              <span className="time-label end">{formatTime(duration)}</span>
+              <span className="time-label end" style={{ transform: 'translate(5px, 8px)' }}>{formatTime(duration - currentTime)}</span>
             </div>
             <div className="current-time">{formatTime(currentTime)}</div>
           </div>
         </div>
-        
+
         <div className="controls">
           <button className='button' style={{ width: '150px', height: '40px' }} onClick={handleRewind}>-5s</button>
           <button className='button' style={{ width: '150px', height: '40px' }} onClick={handlePlayPause}>{isPlaying ? <CirclePause /> : <CirclePlay />}</button>
@@ -562,9 +675,24 @@ const App: React.FC = () => {
             <option value="2">2x</option>
           </select> */}
         </div>
-        <div className="button-group" style={{ marginTop: '1rem' }}>
-          <button className="button" onClick={handleSplitSelection}>Select Split Sections</button>
-          <button className="button" onClick={handleMergeSections}>Merge Selection</button>
+        <div className="button-group" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+          <button className="button" onClick={handleSplitSelection}>Split</button>
+          <button
+            className="button"
+            onClick={handleMergeSections}
+            disabled={isMerging}
+          >
+            {isMerging ? <Loader className="animate-spin" /> : 'Merge'}
+          </button>
+          <button className="button" onClick={handleClearSelection}>Clear</button>
+        </div>
+        {/* New section to display selected split sections */}
+        <div className="selected-sections" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {selectedSections.map((section, index) => (
+            <div key={index} className="selected-section-item" style={{ marginBottom: '0.5rem' }}>
+              {formatTimeHHMMSS(section.start)} - {formatTimeHHMMSS(section.end)}
+            </div>
+          ))}
         </div>
       </div>
     </div>
