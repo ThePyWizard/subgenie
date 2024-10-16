@@ -8,13 +8,19 @@ from starlette import status
 from dotenv import load_dotenv
 import os
 from os import getcwd
+from openai import OpenAI
 
 env_path = f"{getcwd()}/.env"
 load_dotenv(env_path)
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-print(OPENAI_API_KEY)
+client = OpenAI(
+    # This is the default and can be omitted
+    api_key = os.getenv('OPENAI_API_KEY'),
+)
+
+print("openai api key", OPENAI_API_KEY)
 # Initialize FastAPI app
 app = FastAPI()
 
@@ -138,6 +144,82 @@ async def transcribe_audio_v2(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     finally:
         os.unlink(temp_file_path)
+
+def translate_with_gpt(transcription, target_language):
+    openai.api_key = OPENAI_API_KEY
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Chat-based prompt with the transcription
+    prompt_message = f"Translate the following text to {target_language}:\n\n{transcription}"
+
+    data = {
+        "model": "gpt-4o-mini",  # Use the gpt-4o-mini model or any available one
+        "messages": [
+            {"role": "user", "content": prompt_message}
+        ],
+        "temperature": 0.7
+    }
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt_message}],
+        temperature=0.7
+    )
+
+    response = client.chat.completions.create(
+    messages=[{"role": "user", "content": prompt_message}],
+    model="gpt-4o-mini",
+)
+
+    if response and response.choices:
+        translated_text = response.choices[0].message["content"].strip()
+        return translated_text
+    else:
+        raise HTTPException(status_code=500, detail="GPT Translation failed")
+
+
+# New route to transcribe audio and translate using GPT
+@transcription_router.post(path="/v3/transcribe_and_translate_gpt/{output_language}", name="Transcribe and Translate Audio with GPT")
+async def transcribe_audio_with_gpt_translation(
+    output_language: str,
+    file: UploadFile = File(...)
+):
+    """
+    Transcribe audio file and translate it using GPT model to the target language.
+    Args:
+        file: Audio file to transcribe
+        output_language: Target language for translation
+    Returns:
+        Transcription in English and translation in the target language
+    """
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+        contents = await file.read()
+        temp_file.write(contents)
+        temp_file_path = temp_file.name
+
+    try:
+        # Transcribe the audio using Whisper API
+        result = transcribe_with_whisper_api(temp_file_path)
+        transcription = result["text"]
+        
+        # Translate transcription using GPT
+        translated_text = translate_with_gpt(transcription, output_language)
+
+        return {
+            "transcription": transcription,
+            "detected_language": result.get("language", "Not provided by API"),
+            "output_language": output_language,
+            "translated_text": translated_text,
+            "srt_subtitles": "Not available with Whisper API"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    finally:
+        os.unlink(temp_file_path)
+
 
 # Include the router in the app
 app.include_router(transcription_router)

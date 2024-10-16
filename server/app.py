@@ -1,8 +1,26 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, APIRouter, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import whisper
+from pydantic import BaseModel
 import tempfile
 import os
+import whisper
+import requests
+from starlette import status
+from dotenv import load_dotenv
+import os
+from os import getcwd
+from openai import OpenAI
+
+env_path = f"{getcwd()}/.env"
+load_dotenv(env_path)
+
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+client = OpenAI(
+    # This is the default and can be omitted
+    api_key = os.getenv('OPENAI_API_KEY'),
+)
+
 
 app = FastAPI()
 
@@ -34,8 +52,39 @@ def format_timestamp(seconds):
     milliseconds = int((seconds - int(seconds)) * 1000)
     return f"{hours:02d}:{minutes:02d}:{int(seconds):02d},{milliseconds:03d}"
 
-@app.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+
+def translate_with_gpt(transcription, target_language):
+    headers = {
+        "Authorization": f"Bearer {client.api_key}",
+        "Content-Type": "application/json"
+    }
+
+    # Chat-based prompt with the transcription
+    prompt_message = f"Translate the following text to {target_language}:\n\n{transcription}"
+
+    data = {
+        "model": "gpt-4o-mini",  # Use the gpt-4o-mini model or any available one
+        "messages": [
+            {"role": "user", "content": prompt_message}
+        ],
+        "temperature": 0.7
+    }
+
+    response = client.chat.completions.create(
+    messages=[{"role": "user", "content": prompt_message}],
+    model="gpt-4o-mini",
+)
+
+    if response and response.choices:
+        translated_text = response.choices[0]
+        return translated_text
+    else:
+        raise HTTPException(status_code=500, detail="GPT Translation failed")
+
+
+
+@app.post("/transcribe/{output_language}")
+async def transcribe_audio(output_language: str, file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
         contents = await file.read()
         temp_file.write(contents)
@@ -44,10 +93,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
     try:
         result = model.transcribe(temp_file_path, task="translate")
         srt_content = generate_srt(result["segments"])
+        translated_text = translate_with_gpt(srt_content, output_language)
 
         return {
             "transcription": result["text"],
             "detected_language": result["language"],
+            "translated_text": translated_text,
             "srt_subtitles": srt_content
         }
     finally:
