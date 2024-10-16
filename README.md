@@ -62,8 +62,7 @@ Develop an automated system to:
 📊 Data Flow Diagram
 --------------------
 
-[Data Flow Diagram]
-![Subgenie presentation (2)](https://github.com/user-attachments/assets/2f1e3e6c-8cc4-4ce6-b88e-5b601c5962f2)
+![Data Flow Diagram](https://github.com/user-attachments/assets/2f1e3e6c-8cc4-4ce6-b88e-5b601c5962f2)
 
 🎬 FFMPEG Architecture
 ----------------------
