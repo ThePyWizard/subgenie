@@ -641,19 +641,19 @@ ${subtitles.map(sub => {
                 ))}
                 <div
                   className="selection-bar start"
-                  style={{ left: `${((selectionStart - currentTime) / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
+                  style={{ left: `${Math.max(0, Math.min(((selectionStart - currentTime) / duration) * 100, 100))}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'start')}
                 ></div>
                 <div
                   className="selection-bar end"
-                  style={{ left: `${((selectionEnd - currentTime) / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
+                  style={{ left: `${Math.max(0, Math.min(((selectionEnd - currentTime) / duration) * 100, 100))}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'end')}
                 ></div>
                 <div
                   className="selection-range"
                   style={{
-                    left: `${((selectionStart - currentTime) / duration) * 100}%`,
-                    width: `${(((selectionEnd - currentTime) - (selectionStart - currentTime)) / duration) * 100}%`,
+                    left: `${Math.max(0, Math.min(((selectionStart - currentTime) / duration) * 100, 100))}%`,
+                    width: `${Math.max(0, Math.min((((selectionEnd - currentTime) - (selectionStart - currentTime)) / duration) * 100, 100))}%`,
                     height: '100%', // Adjusted height to match the increased timeline height
                   }}
                 ></div>
