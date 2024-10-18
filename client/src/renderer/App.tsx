@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [exportProgress, setExportProgress] = useState(0);
   const [isMerging, setIsMerging] = useState(false);
   const videoOverlayRef = useRef<HTMLDivElement>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('English');
 
   useEffect(() => {
     const loadFFmpeg = async () => {
@@ -418,7 +419,7 @@ const App: React.FC = () => {
       formData.append('file', mp3Blob, `audio_${Date.now()}.mp3`);
 
       // Send MP3 to backend for transcription
-      const response = await axios.post('http://127.0.0.1:8000/transcribe', formData, {
+      const response = await axios.post(`http://127.0.0.1:8000/transcribe/${selectedLanguage}`, formData, {
         headers: {
           'accept': 'application/json',
           'Content-Type': 'multipart/form-data'
@@ -529,11 +530,16 @@ const App: React.FC = () => {
         </div>
         <div className="button-group">
           <div className="dropdown">
-            <select className="button" style={{ borderRadius: 'var(--radius)', width: '150px', height: '40px', display: 'inline-block' }}>
-              <option value="English">Select Language</option>
+            <select 
+              className="button" 
+              style={{ borderRadius: 'var(--radius)', width: '150px', height: '40px', display: 'inline-block' }}
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+            >
               <option value="English">English</option>
-              <option value="Spanish">Spanish</option>
-              <option value="French">French</option>
+              <option value="Hindi">Hindi</option>
+              <option value="Malayalam">Malayalam</option>
+              <option value="Tamil">Tamil</option>
             </select>
           </div>
           <button
@@ -632,27 +638,27 @@ const App: React.FC = () => {
                     key={index}
                     className="selected-section"
                     style={{
-                      left: `${((section.start - currentTime) / duration) * 100}%`,
-                      width: `${(((section.end - currentTime) - (section.start - currentTime)) / duration) * 100}%`,
+                      left: `${(section.start / duration) * 100}%`,
+                      width: `${((section.end - section.start) / duration) * 100}%`,
                       height: '100%', // Adjusted height to match the increased timeline height
                     }}
                   ></div>
                 ))}
                 <div
                   className="selection-bar start"
-                  style={{ left: `${Math.max(0, Math.min(((selectionStart - currentTime) / duration) * 100, 100))}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
+                  style={{ left: `${(selectionStart / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'start')}
                 ></div>
                 <div
                   className="selection-bar end"
-                  style={{ left: `${Math.max(0, Math.min(((selectionEnd - currentTime) / duration) * 100, 100))}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
+                  style={{ left: `${(selectionEnd / duration) * 100}%`, height: '32px', top: '50%', transform: 'translateY(-50%)' }} // Adjusted position to center vertically
                   onMouseDown={(e) => handleMouseDown(e, 'end')}
                 ></div>
                 <div
                   className="selection-range"
                   style={{
-                    left: `${Math.max(0, Math.min(((selectionStart - currentTime) / duration) * 100, 100))}%`,
-                    width: `${Math.max(0, Math.min((((selectionEnd - currentTime) - (selectionStart - currentTime)) / duration) * 100, 100))}%`,
+                    left: `${(selectionStart / duration) * 100}%`,
+                    width: `${((selectionEnd - selectionStart) / duration) * 100}%`,
                     height: '100%', // Adjusted height to match the increased timeline height
                   }}
                 ></div>
